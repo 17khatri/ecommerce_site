@@ -19,11 +19,14 @@ export const createBrandHandler = async (req: Request, res: Response) => {
     }
 }
 
-export const getBrandsHandler = async (_req: Request, res: Response) => {
-    try {
-        const brands = await brandService.getBrands()
+export const getBrandsHandler = async (req: Request, res: Response) => {
+    const page = Number(req.query.page) || 1
+    const limit = Number(req.query.limit) || 10
 
-        const result = brands.map(b => ({
+    try {
+        const brands = await brandService.getBrands(page, limit)
+
+        const result = brands.data.map(b => ({
             ...b,
             id: b.id.toString()
         }))

@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  url      = env("DATABASE_URL") // ✅ works in v5
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -12,103 +12,177 @@ enum Role {
   USER
 }
 
+export enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
 model User {
-  id          BigInt   @id @default(autoincrement())
-  firstName   String
-  middleName  String?
-  lastName    String
-  gender      String
-  birthDate   DateTime
-  email       String   @unique
-  phoneNumber String
-  status      Boolean  @default(true)
-  password    String?
-
-  role Role @default(USER)
-
+  id               BigInt    @id @default(autoincrement())
+  firstName        String
+  middleName       String?
+  lastName         String
+  gender           String
+  birthDate        DateTime
+  email            String    @unique
+  phoneNumber      String
+  status           Boolean   @default(true)
+  password         String?
   resetToken       String?   @unique
   resetTokenExpiry DateTime?
-
-  createdAt DateTime  @default(now())
-  deletedAt DateTime?
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
+  role             Role      @default(USER)
+  updatedAt        DateTime  @default(now()) @updatedAt
+  cart             Cart?
+  orders           Order[]
 }
 
 model Category {
-  id       BigInt  @id @default(autoincrement())
-  name     String
-  parentId BigInt? // 👈 optional (for parent-child)
-
-  parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryToCategory")
-
-  status    Boolean   @default(true)
-  createdAt DateTime  @default(now())
+  id        BigInt     @id @default(autoincrement())
+  name      String
+  parentId  BigInt?
+  status    Boolean    @default(true)
+  createdAt DateTime   @default(now())
   deletedAt DateTime?
+  updatedAt DateTime   @default(now()) @updatedAt
+  parent    Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryToCategory")
+  products  Product[]
 
-  products Product[]
+  @@index([parentId], map: "Category_parentId_fkey")
 }
 
 model Brand {
-  id     BigInt  @id @default(autoincrement())
-  name   String  @unique
-  status Boolean @default(true)
-
+  id        BigInt    @id @default(autoincrement())
+  name      String    @unique
+  status    Boolean   @default(true)
   createdAt DateTime  @default(now())
   deletedAt DateTime?
-
-  products Product[]
+  updatedAt DateTime  @default(now()) @updatedAt
+  products  Product[]
 }
 
 model Product {
-  id BigInt @id @default(autoincrement())
-
-  categoryId BigInt
-  brandId    BigInt
-
+  id          BigInt           @id @default(autoincrement())
+  brandId     BigInt
   name        String
   description String?
+  status      Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  deletedAt   DateTime?
+  categoryId  BigInt
+  updatedAt   DateTime         @default(now()) @updatedAt
+  variants    ProductVariant[]
+  cartItems   CartItem[]
+  brand       Brand            @relation(fields: [brandId], references: [id])
+  category    Category         @relation(fields: [categoryId], references: [id])
+  images      ProductImage[]
+  orderItems  OrderItem[]
 
-  status Boolean @default(true)
-
-  variants ProductVariant[]
-
-   images        ProductImage[]
-
-  createdAt DateTime  @default(now())
-  deletedAt DateTime?
-
-  category Category @relation(fields: [categoryId], references: [id])
-  brand    Brand    @relation(fields: [brandId], references: [id])
-
+  @@index([brandId], map: "products_brandId_fkey")
+  @@index([categoryId], map: "products_categoryId_fkey")
   @@map("products")
 }
 
 model ProductVariant {
-  id        BigInt @id @default(autoincrement())
-  productId BigInt
+  id         BigInt      @id @default(autoincrement())
+  productId  BigInt
+  sku        String      @unique
+  price      Decimal     @db.Decimal(10, 2)
+  quantity   Int
+  color      String?
+  size       String?
+  deletedAt  DateTime?
+  updatedAt  DateTime    @default(now()) @updatedAt
+  product    Product     @relation(fields: [productId], references: [id])
+  cartItems  CartItem[]
+  orderItems OrderItem[]
 
-  sku       String @unique
-  price     Float
-  quantity  Int
-
-  color     String?
-  size      String?
-
-  product   Product @relation(fields: [productId], references: [id])
-
-  deletedAt DateTime?
+  @@index([productId], map: "ProductVariant_productId_fkey")
 }
 
-
 model ProductImage {
-  id         BigInt   @id @default(autoincrement())
-  productId  BigInt   @map("products_id")
-  imagePath  String   @map("image_path")
-  isPrimary  Boolean  @default(false) // 👈 NEW FIELD
-  createdAt  DateTime @default(now()) @map("created_at")
-  status     Boolean  @default(true)
+  id        BigInt   @id @default(autoincrement())
+  productId BigInt   @map("products_id")
+  imagePath String   @map("image_path")
+  createdAt DateTime @default(now()) @map("created_at")
+  status    Boolean  @default(true)
+  isPrimary Boolean  @default(false)
+  updatedAt DateTime @default(now()) @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-
+  @@index([productId], map: "products_images_products_id_fkey")
   @@map("products_images")
+}
+
+model Cart {
+  id        BigInt     @id @default(autoincrement())
+  userId    BigInt     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @default(now()) @updatedAt
+  deletedAt DateTime?
+  cartItems CartItem[]
+  user      User       @relation(fields: [userId], references: [id])
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        BigInt         @id @default(autoincrement())
+  cartId    BigInt
+  productId BigInt
+  variantId BigInt
+  quantity  Int            @default(1)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @default(now()) @updatedAt
+  deletedAt DateTime?
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId, variantId]) // ✅ ADD THIS
+  @@index([cartId])
+  @@index([productId])
+  @@index([variantId])
+  @@map("cart_items")
+}
+
+model Order {
+  id            BigInt        @id @default(autoincrement())
+  userId        BigInt
+  sessionId     String?
+  totalAmount   Decimal       @db.Decimal(10, 2)
+  paymentStatus PaymentStatus
+  fullName      String
+  city          String
+  zipCode       Int
+  state         String
+  address       String
+  paymentMethod String
+  createdAt     DateTime      @default(now())
+
+  // Relations
+  user       User        @relation(fields: [userId], references: [id])
+  orderItems OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id               BigInt   @id @default(autoincrement())
+  productId        BigInt
+  orderId          BigInt
+  productVariantId BigInt
+  productPrice     Decimal  @db.Decimal(10, 2)
+  quantity         Int
+  createdAt        DateTime @default(now())
+
+  // Relations
+  order          Order          @relation(fields: [orderId], references: [id])
+  product        Product        @relation(fields: [productId], references: [id])
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+
+  @@map("order_items")
 }

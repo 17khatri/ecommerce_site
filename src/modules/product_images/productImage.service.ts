@@ -102,3 +102,52 @@ export const uploadProductImagesService = async (req: any) => {
 
     return response;
 };
+
+export const deleteProductImageService = async (imageId: string) => {
+    if (!imageId) {
+        throw new Error("imageId is required");
+    }
+
+    const imageIdBigInt = BigInt(imageId);
+
+    // 🔍 Find image
+    const image = await prisma.productImage.findUnique({
+        where: { id: imageIdBigInt },
+    });
+
+    if (!image) {
+        throw new Error("Image not found");
+    }
+
+    // 🗑️ Delete file from local storage
+    try {
+        await fs.unlink(path.resolve(image.imagePath));
+    } catch (err) {
+        console.warn("File not found:", image.imagePath);
+    }
+
+    // ❗ Check if it's primary
+    const wasPrimary = image.isPrimary;
+
+    // 🗑️ Delete from DB
+    await prisma.productImage.delete({
+        where: { id: imageIdBigInt },
+    });
+
+    // 🔄 If primary deleted → assign new primary
+    if (wasPrimary) {
+        const nextImage = await prisma.productImage.findFirst({
+            where: { productId: image.productId },
+            orderBy: { id: "asc" },
+        });
+
+        if (nextImage) {
+            await prisma.productImage.update({
+                where: { id: nextImage.id },
+                data: { isPrimary: true },
+            });
+        }
+    }
+
+    return { id: imageId };
+};

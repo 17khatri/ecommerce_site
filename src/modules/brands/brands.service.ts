@@ -28,16 +28,39 @@ export const createBrand = async (name: string) => {
     })
 }
 
-export const getBrands = async () => {
-    const brands = await prisma.brand.findMany({
-        where: {
-            deletedAt: null,
-            status: true
-        },
-    })
+export const getBrands = async (page = 1, limit = 10) => {
+    const skip = (page - 1) * limit;
 
-    return brands
-}
+    const [brands, total] = await Promise.all([
+        prisma.brand.findMany({
+            where: {
+                deletedAt: null,
+                status: true
+            },
+            skip,
+            take: limit,
+            orderBy: {
+                createdAt: "desc"
+            }
+        }),
+        prisma.brand.count({
+            where: {
+                deletedAt: null,
+                status: true
+            }
+        })
+    ]);
+
+    return {
+        data: brands,
+        meta: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
+        }
+    };
+};
 
 export const deleteBrand = async (id: string) => {
     const brandId = BigInt(id);
