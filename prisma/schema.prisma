@@ -18,6 +18,11 @@ enum PaymentStatus {
   FAILED
 }
 
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
 model User {
   id               BigInt    @id @default(autoincrement())
   firstName        String
@@ -62,6 +67,7 @@ model Brand {
   deletedAt DateTime?
   updatedAt DateTime  @default(now()) @updatedAt
   products  Product[]
+  coupon    Coupon[]
 }
 
 model Product {
@@ -161,9 +167,12 @@ model Order {
   state         String
   address       String
   paymentMethod String
-  createdAt     DateTime      @default(now())
 
-  // Relations
+  couponId BigInt?
+  coupon   Coupon? @relation(fields: [couponId], references: [id])
+
+  createdAt DateTime @default(now())
+
   user       User        @relation(fields: [userId], references: [id])
   orderItems OrderItem[]
 
@@ -176,14 +185,38 @@ model OrderItem {
   orderId          BigInt
   productVariantId BigInt
   productPrice     Decimal  @db.Decimal(10, 2)
-  discountedPrice  Decimal  @db.Decimal(10, 2)
+  discountedPrice Decimal @db.Decimal(10,2) @default(0)
   quantity         Int
   createdAt        DateTime @default(now())
 
-  // Relations
   order          Order          @relation(fields: [orderId], references: [id])
   product        Product        @relation(fields: [productId], references: [id])
   productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
 
   @@map("order_items")
+}
+
+model Coupon {
+  id                 BigInt   @id @default(autoincrement())
+  name               String
+  code               String   @unique
+  couponType         String
+  brandId            BigInt?
+  discountPercentage Float?
+  fixedAmount        Float?
+  minOrderAmount     Float
+  maxDiscountPrice   Float?
+  maxUsage           Int
+  usedCount          Int      @default(0)
+  startDate          DateTime
+  endDate            DateTime
+  status             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt DateTime       @default(now()) @updatedAt
+  deletedAt DateTime?
+
+  brand Brand?  @relation(fields: [brandId], references: [id])
+  Order Order[]
+
+  @@map("coupons")
 }

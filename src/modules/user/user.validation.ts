@@ -8,7 +8,6 @@ const requiredStringWithLength = (
     z.preprocess(
         (val) => (typeof val === "string" ? val.trim() : ""),
         z.string()
-            .trim()
             .min(1, `${field} is required`)
             .min(min, `${field} must be at least ${min} characters`)
             .max(max, `${field} must be less than ${max} characters`)
@@ -18,8 +17,8 @@ export const createUserSchema = z.object({
     firstName: requiredStringWithLength("First name", 2, 50),
 
     middleName: z.string()
-        .trim()
-        .max(50)
+        .transform(val => val.trim())
+        .transform(val => val === "" ? undefined : val)
         .optional(),
 
     lastName: requiredStringWithLength("Last name", 2, 50),

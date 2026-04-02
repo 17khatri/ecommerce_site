@@ -12,10 +12,7 @@ export const createBrandHandler = async (req: Request, res: Response) => {
 
         res.status(201).json({
             message: "Brand is created",
-            data: {
-                ...brand,
-                id: brand.id.toString()
-            }
+            data: serializeBigInt(brand)
         })
     } catch (error: any) {
 
