@@ -9,8 +9,8 @@ router.post("/", authUser, isAdmin, createBrandHandler)
 
 router.get("/", getBrandsHandler)
 
-router.delete("/:id", deleteBrandhandler)
+router.delete("/:id", authUser, isAdmin, deleteBrandhandler)
 
-router.put("/:id", updateBrandHandler)
+router.put("/:id", authUser, isAdmin, updateBrandHandler)
 
 export default router

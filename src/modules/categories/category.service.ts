@@ -1,42 +1,97 @@
 import prisma from "../../prisma/client.js";
 
 export const createCategory = async (name: string, parentId?: string) => {
+
+    const normalizedName = name.trim().toLowerCase();
+
+    const existing = await prisma.category.findFirst({
+        where: {
+            name: normalizedName,
+            deletedAt: null
+        }
+    });
+
+    if (existing) {
+        throw new Error("Category already exists");
+    }
+
     return prisma.category.create({
         data: {
-            name,
+            name: normalizedName,
             parentId: parentId ? BigInt(parentId) : null,
         },
     });
 };
 
-export const getCategories = async () => {
-    const categories = await prisma.category.findMany({
-        where: { deletedAt: null, status: true },
+export const getCategories = async (query: any) => {
+    const {
+        page = 1,
+        limit = 10,
+        search = "",
+        sortBy = "createdAt",
+        order = "desc",
+        status
+    } = query;
 
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const where: any = {
+        deletedAt: null,
+    };
+
+    if (status !== undefined) {
+        where.status = status === "true" || status === true;
+    }
+
+    if (search) {
+        where.name = {
+            contains: search,
+        };
+    }
+
+    const total = await prisma.category.count({ where });
+
+    const categories = await prisma.category.findMany({
+        where,
+        skip,
+        take: limitNumber,
+        orderBy: {
+            [sortBy]: order === "asc" ? "asc" : "desc",
+        },
     });
 
     const map = new Map<string, any>();
 
-    categories.forEach(cat => {
+    categories.forEach((cat) => {
         map.set(cat.id.toString(), {
             ...cat,
             id: cat.id.toString(),
             parentId: cat.parentId?.toString() || null,
-            children: []
+            children: [],
         });
     });
 
     const tree: any[] = [];
 
-    map.forEach(cat => {
-        if (cat.parentId) {
-            map.get(cat.parentId)?.children.push(cat);
+    map.forEach((cat) => {
+        if (cat.parentId && map.has(cat.parentId)) {
+            map.get(cat.parentId).children.push(cat);
         } else {
             tree.push(cat);
         }
     });
 
-    return tree;
+    return {
+        data: tree,
+        meta: {
+            total,
+            page: pageNumber,
+            limit: limitNumber,
+            totalPages: Math.ceil(total / limitNumber),
+        },
+    };
 };
 
 const getAllChildCategoryIds = async (parentId: bigint): Promise<bigint[]> => {
@@ -96,43 +151,26 @@ export const deleteCategory = async (id: string) => {
 export const updateCategory = async (
     id: string,
     name?: string,
-    parentId?: string | null
+    parentId?: string
 ) => {
-    const categoryId = BigInt(id);
 
-    // 1. Check category exists (and not deleted)
-    const category = await prisma.category.findFirst({
-        where: {
-            id: categoryId,
-            deletedAt: null
-        }
+    const existing = await prisma.category.findUnique({
+        where: { id: BigInt(id) }
     });
 
-    if (!category) {
+    if (!existing) {
         throw new Error("Category not found");
     }
 
-    // 2. Prevent self-parenting
-    if (parentId && BigInt(parentId) === categoryId) {
+    // ❌ Prevent self-parenting
+    if (parentId && id === parentId) {
         throw new Error("Category cannot be its own parent");
     }
 
-    // 3. Prevent circular structure
+    // ✅ Check parent exists
     if (parentId) {
-        const allChildren = await getAllChildCategoryIds(categoryId);
-
-        if (allChildren.includes(BigInt(parentId))) {
-            throw new Error("Cannot move category inside its own subtree");
-        }
-    }
-
-    // 4. Validate parent exists
-    if (parentId) {
-        const parent = await prisma.category.findFirst({
-            where: {
-                id: BigInt(parentId),
-                deletedAt: null
-            }
+        const parent = await prisma.category.findUnique({
+            where: { id: BigInt(parentId) }
         });
 
         if (!parent) {
@@ -140,16 +178,11 @@ export const updateCategory = async (
         }
     }
 
-    // 5. Update
-    const updated = await prisma.category.update({
-        where: { id: categoryId },
+    return prisma.category.update({
+        where: { id: BigInt(id) },
         data: {
             ...(name && { name }),
-            ...(parentId !== undefined && {
-                parentId: parentId ? BigInt(parentId) : null
-            })
+            ...(parentId && { parentId: BigInt(parentId) })
         }
     });
-
-    return updated;
 };

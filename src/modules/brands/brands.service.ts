@@ -2,9 +2,11 @@ import prisma from "../../prisma/client.js";
 
 export const createBrand = async (name: string) => {
 
+    const normalizedName = name.trim().toLowerCase();
+
     const existing = await prisma.brand.findFirst({
         where: {
-            name,
+            name: normalizedName,
         }
     })
 
@@ -23,42 +25,67 @@ export const createBrand = async (name: string) => {
     }
     return prisma.brand.create({
         data: {
-            name
+            name: normalizedName
         }
     })
 }
 
-export const getBrands = async (page = 1, limit = 10) => {
-    const skip = (page - 1) * limit;
+export const getBrands = async (query: any) => {
+    const {
+        page = 1,
+        limit = 10,
+        search = "",
+        sortBy = "createdAt",
+        order = "desc",
+        status
+    } = query;
+
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const allowedSortFields = ["name", "createdAt"];
+    const sortField = allowedSortFields.includes(sortBy)
+        ? sortBy
+        : "createdAt";
+
+    const sortOrder: "asc" | "desc" =
+        ["asc", "az"].includes(order) ? "asc" : "desc";
+
+    const where: any = {
+        deletedAt: null,
+    };
+
+    if (status !== undefined) {
+        where.status = status === "true" || status === true;
+    }
+
+    if (search) {
+        where.name = {
+            contains: search,
+        };
+    }
 
     const [brands, total] = await Promise.all([
         prisma.brand.findMany({
-            where: {
-                deletedAt: null,
-                status: true
-            },
+            where,
             skip,
-            take: limit,
+            take: limitNumber,
             orderBy: {
-                createdAt: "desc"
-            }
+                [sortField]: sortOrder,
+            },
         }),
-        prisma.brand.count({
-            where: {
-                deletedAt: null,
-                status: true
-            }
-        })
+        prisma.brand.count({ where }),
     ]);
 
     return {
         data: brands,
         meta: {
             total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit)
-        }
+            page: pageNumber,
+            limit: limitNumber,
+            totalPages: Math.ceil(total / limitNumber),
+        },
     };
 };
 

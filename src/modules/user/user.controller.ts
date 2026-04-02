@@ -3,10 +3,14 @@ import * as userService from "./user.service.js";
 import { User } from "@prisma/client";
 import { sendResetEmail } from "../../utils/sendEmail.js";
 import { AuthRequest } from "../../middleware/auth.middleware.js";
+import { serializeBigInt } from "../../utils/serialize.js";
+import { createUserSchema } from "./user.validation.js";
+import { ZodError } from "zod";
 
 export const createUserHandler = async (req: Request, res: Response) => {
     try {
-        const { user, resetToken } = await userService.createUser(req.body);
+        const validatedData = createUserSchema.parse(req.body);
+        const { user, resetToken } = await userService.createUser(validatedData);
 
         await sendResetEmail(user.email, resetToken)
 
@@ -21,6 +25,12 @@ export const createUserHandler = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error(error);
+
+        if (error instanceof ZodError) {
+            return res.status(400).json({
+                error: error.issues.map((e: any) => e.message)
+            });
+        }
 
         res.status(500).json({
             error: error.message || "Failed to create user",
@@ -79,22 +89,20 @@ export const changePasswordHandler = async (req: AuthRequest, res: Response) => 
     }
 }
 
-export const getUserHandler = async (_req: Request, res: Response) => {
+export const getUserHandler = async (req: Request, res: Response) => {
     try {
-        const users = await userService.getUsers();
+        const users = await userService.getUsers(req.query);
 
 
-        const result = users.map((u: User) => {
+        const result = users.data.map((u: User) => {
             const { password, resetToken, resetTokenExpiry, ...safeUser } = u;
 
-            return {
-                ...safeUser,
-                id: u.id.toString(),
-            };
+            return safeUser;
         });
 
         res.json({
-            data: result,
+            data: serializeBigInt(result),
+            meta: users.meta
         });
     } catch (error) {
         res.status(500).json({ error: "Failed to fetch users" });

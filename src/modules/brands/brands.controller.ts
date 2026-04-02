@@ -1,11 +1,14 @@
 import { Request, Response } from "express"
 import * as brandService from "./brands.service.js"
+import { serializeBigInt } from "../../utils/serialize.js"
+import { brandIdSchema, createBrandSchema, updateBrandSchema } from "./brand.validation.js"
+import { ZodError } from "zod"
 
 export const createBrandHandler = async (req: Request, res: Response) => {
     try {
-        const { name } = await req.body
 
-        const brand = await brandService.createBrand(name)
+        const validatedData = createBrandSchema.parse(req.body)
+        const brand = await brandService.createBrand(validatedData.name)
 
         res.status(201).json({
             message: "Brand is created",
@@ -15,31 +18,37 @@ export const createBrandHandler = async (req: Request, res: Response) => {
             }
         })
     } catch (error: any) {
+
+        if (error instanceof ZodError) {
+            return res.status(400).json({
+                error: error.issues.map((e: any) => e.message)
+            });
+        }
+
         res.status(400).json({ error: error.message })
     }
 }
 
 export const getBrandsHandler = async (req: Request, res: Response) => {
-    const page = Number(req.query.page) || 1
-    const limit = Number(req.query.limit) || 10
-
     try {
-        const brands = await brandService.getBrands(page, limit)
+        const result = await brandService.getBrands(req.query);
 
-        const result = brands.data.map(b => ({
-            ...b,
-            id: b.id.toString()
-        }))
-        res.json({ data: result })
+        const safeData = serializeBigInt(result.data);
+
+        res.json({
+            data: safeData,
+            meta: result.meta,
+        });
     } catch (error) {
-        res.status(500).json({ error: "Failed to fetch brands" })
+        console.error(error);
+        res.status(500).json({ error: "Failed to fetch brands" });
     }
-}
+};
 
 export const updateBrandHandler = async (req: Request, res: Response) => {
     try {
-        const id = req.params.id as string;
-        const { name, status } = req.body;
+        const { id } = brandIdSchema.parse(req.params);
+        const { name, status } = updateBrandSchema.parse(req.body);
 
         const brand = await brandService.updateBrand(id, name, status);
 
@@ -52,6 +61,11 @@ export const updateBrandHandler = async (req: Request, res: Response) => {
             }
         });
     } catch (error: any) {
+        if (error instanceof ZodError) {
+            return res.status(400).json({
+                error: error.issues.map((e: any) => e.message)
+            });
+        }
         res.status(400).json({
             success: false,
             message: error.message

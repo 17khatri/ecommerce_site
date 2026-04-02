@@ -121,22 +121,6 @@ export const createOrderService = async (data: any) => {
             orderItems.push(orderItem);
         }
 
-        // ✅ Step 4: Clear Cart
-        const updatedCart = await tx.cart.findUnique({
-            where: { userId: BigInt(userId) }
-        });
-
-        if (updatedCart) {
-            await tx.cartItem.deleteMany({
-                where: {
-                    cartId: updatedCart.id,
-                    variantId: {
-                        in: createdItems.map(i => i.productVariantId)
-                    }
-                }
-            });
-        }
-
         return {
             ...order,
             orderItems

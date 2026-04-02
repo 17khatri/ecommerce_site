@@ -6,8 +6,18 @@ import productRoutes from "./src/modules/products/products.route.js"
 import productImageRoutes from "./src/modules/product_images/productImage.route.js"
 import cartRoutes from "./src/modules/carts/carts.route.js"
 import orderRoutes from "./src/modules/orders/order.route.js"
+import webhookRoutes from "./src/modules/webhook/webhook.route.js"
+import paymentRoutes from "./src/modules/payment/payment.route.js"
+import cors from "cors"
 
 const app = express()
+
+app.use(cors({
+    origin: "http://localhost:3000",
+    credentials: true
+}));
+
+app.use("/webhook", express.raw({ type: "application/json" }), webhookRoutes)
 
 app.use(express.json())
 
@@ -20,5 +30,6 @@ app.use("/api/products", productRoutes)
 app.use("/api/product-images", productImageRoutes)
 app.use("/api/carts", cartRoutes)
 app.use("/api/orders", orderRoutes)
+app.use("/api/payments", paymentRoutes)
 
 export default app

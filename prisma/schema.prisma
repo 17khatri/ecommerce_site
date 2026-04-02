@@ -12,7 +12,7 @@ enum Role {
   USER
 }
 
-export enum PaymentStatus {
+enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
@@ -68,7 +68,7 @@ model Product {
   id          BigInt           @id @default(autoincrement())
   brandId     BigInt
   name        String
-  description String?
+  description String?          @db.Text
   status      Boolean          @default(true)
   createdAt   DateTime         @default(now())
   deletedAt   DateTime?
@@ -176,6 +176,7 @@ model OrderItem {
   orderId          BigInt
   productVariantId BigInt
   productPrice     Decimal  @db.Decimal(10, 2)
+  discountedPrice  Decimal  @db.Decimal(10, 2)
   quantity         Int
   createdAt        DateTime @default(now())
 

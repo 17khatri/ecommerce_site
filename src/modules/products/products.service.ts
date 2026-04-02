@@ -1,7 +1,7 @@
 import prisma from "../../prisma/client.js";
 
 type VariantInput = {
-    id?: string;
+    id?: bigint;
     price: number;
     quantity: number;
     color?: string;
@@ -17,71 +17,154 @@ type UpdatePrductInput = {
 }
 
 export const createProduct = async (categoryId: bigint, brandId: bigint, name: string, description: string, variants: VariantInput[]) => {
-    const product = await prisma.product.create({
-        data: {
-            categoryId,
-            brandId,
-            name,
-            description
-        }
-    })
 
-    const createdVariants = [];
+    return prisma.$transaction(async (tx) => {
 
-    for (const variant of variants) {
-        const v = await prisma.productVariant.create({
+        const product = await tx.product.create({
             data: {
-                productId: product.id,
-                price: variant.price,
-                quantity: variant.quantity,
-                color: variant.color,
-                size: variant.size,
-                sku: "TEMP"
+                categoryId,
+                brandId,
+                name,
+                description
             }
-        })
+        });
 
-        const sku = `ECS${1000 + Number(v.id)}`
+        const createdVariants = [];
 
-        const updatedVariant = await prisma.productVariant.update({
-            where: { id: v.id },
-            data: { sku }
-        })
-
-        createdVariants.push(updatedVariant)
-    }
-    return {
-        ...product,
-        variants: createdVariants
-    }
-}
-
-export const getProducts = async () => {
-    const products = await prisma.product.findMany({
-        where: {
-            deletedAt: null,
-            status: true
-        },
-
-        include: {
-            variants: true,
-            brand: {
-                select: {
-                    name: true
+        for (const variant of variants) {
+            const v = await tx.productVariant.create({
+                data: {
+                    productId: product.id,
+                    price: variant.price,
+                    quantity: variant.quantity,
+                    color: variant.color,
+                    size: variant.size,
+                    sku: "TEMP"
                 }
-            },
-            category: {
-                select: {
-                    name: true
-                }
-            }
-        },
-        orderBy: {
-            createdAt: "desc"
+            });
+
+            const sku = `ECS${1000 + Number(v.id)}`;
+
+            const updatedVariant = await tx.productVariant.update({
+                where: { id: v.id },
+                data: { sku }
+            });
+
+            createdVariants.push(updatedVariant);
         }
-    })
 
-    return products
-}
+        return {
+            ...product,
+            variants: createdVariants
+        };
+    });
+};
+
+export const getProducts = async (query: any) => {
+    const {
+        page = 1,
+        limit = 10,
+        search = "",
+        sortBy = "createdAt",
+        order = "desc",
+        status,
+        categoryId,
+        brandId
+    } = query;
+
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // ✅ Allowed sorting fields
+    const allowedSortFields = ["name", "price", "createdAt"];
+    const sortField = allowedSortFields.includes(sortBy)
+        ? sortBy
+        : "createdAt";
+
+    const sortOrder = ["asc", "az"].includes(order) ? "asc" : "desc";
+
+    // ✅ Where clause
+    const where: any = {
+        deletedAt: null,
+    };
+
+    // ✅ Status filter
+    if (status !== undefined) {
+        where.status = status === "true" || status === true;
+    }
+
+    // ✅ Category filter
+    if (categoryId) {
+        where.categoryId = BigInt(categoryId);
+    }
+
+    // ✅ Brand filter
+    if (brandId) {
+        where.brandId = BigInt(brandId);
+    }
+
+    // ✅ Search (product + relations)
+    if (search) {
+        where.OR = [
+            {
+                name: {
+                    contains: search,
+                    mode: "insensitive",
+                },
+            },
+            {
+                brand: {
+                    name: {
+                        contains: search,
+                        mode: "insensitive",
+                    },
+                },
+            },
+            {
+                category: {
+                    name: {
+                        contains: search,
+                        mode: "insensitive",
+                    },
+                },
+            },
+        ];
+    }
+
+    const [products, total] = await Promise.all([
+        prisma.product.findMany({
+            where,
+            skip,
+            take: limitNumber,
+
+            include: {
+                variants: true,
+                brand: {
+                    select: { name: true },
+                },
+                category: {
+                    select: { name: true },
+                },
+            },
+
+            orderBy: {
+                [sortField]: sortOrder,
+            },
+        }),
+        prisma.product.count({ where }),
+    ]);
+
+    return {
+        data: products,
+        meta: {
+            total,
+            page: pageNumber,
+            limit: limitNumber,
+            totalPages: Math.ceil(total / limitNumber),
+        },
+    };
+};
 
 export const updateProduct = async (productId: bigint, data: UpdatePrductInput) => {
     return await prisma.$transaction(async (tx) => {
@@ -118,7 +201,9 @@ export const updateProduct = async (productId: bigint, data: UpdatePrductInput) 
             })
 
             const existingIds = existingVariants.map(v => v.id.toString())
-            const incomingIds = data.variants.filter(v => v.id).map(v => v.id as string)
+            const incomingIds = data.variants
+                .filter(v => v.id)
+                .map(v => v.id!.toString())
 
             const toDelete = existingIds.filter(id => !incomingIds.includes(id))
 

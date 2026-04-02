@@ -13,7 +13,7 @@ const router = Router();
 
 router.post("/", authUser, isAdmin, createCategoryHandler);
 
-router.get("/", authUser, getCategoryHandler);
+router.get("/", getCategoryHandler);
 
 router.delete("/:id", authUser, isAdmin, deleteCategoryHandler)
 
