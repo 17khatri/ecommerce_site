@@ -114,8 +114,7 @@ export const getCart = async (userId: string) => {
     const validItems = cart.cartItems.filter(item =>
         item.product &&
         item.product.status === true &&
-        item.product.deletedAt === null &&
-        item.variant.quantity > 0
+        item.product.deletedAt === null
     );
 
     // ✅ Calculate total

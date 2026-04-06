@@ -3,6 +3,8 @@ import * as brandService from "./brands.service.js"
 import { serializeBigInt } from "../../utils/serialize.js"
 import { brandIdSchema, createBrandSchema, updateBrandSchema } from "./brand.validation.js"
 import { ZodError } from "zod"
+import { errorResponse, successResponse } from "../../utils/response.js"
+import { formatZodError } from "../../utils/zodError.js"
 
 export const createBrandHandler = async (req: Request, res: Response) => {
     try {
@@ -10,19 +12,18 @@ export const createBrandHandler = async (req: Request, res: Response) => {
         const validatedData = createBrandSchema.parse(req.body)
         const brand = await brandService.createBrand(validatedData.name)
 
-        res.status(201).json({
-            message: "Brand is created",
-            data: serializeBigInt(brand)
-        })
+        return successResponse(res, "Brand created successfully", serializeBigInt(brand), null, 201)
     } catch (error: any) {
 
         if (error instanceof ZodError) {
             return res.status(400).json({
-                error: error.issues.map((e: any) => e.message)
+                status: false,
+                message: "Validation failed",
+                error: formatZodError(error)
             });
         }
 
-        res.status(400).json({ error: error.message })
+        return errorResponse(res, "Failed to create brand", error.message || "Failed to create brand", 400)
     }
 }
 
@@ -32,13 +33,10 @@ export const getBrandsHandler = async (req: Request, res: Response) => {
 
         const safeData = serializeBigInt(result.data);
 
-        res.json({
-            data: safeData,
-            meta: result.meta,
-        });
-    } catch (error) {
+        return successResponse(res, "Brands fetched successfully", safeData, result.meta)
+    } catch (error: any) {
         console.error(error);
-        res.status(500).json({ error: "Failed to fetch brands" });
+        return errorResponse(res, "Failed to fetch brands", error.message || "Failed to fetch brands", 500)
     }
 };
 
@@ -49,41 +47,27 @@ export const updateBrandHandler = async (req: Request, res: Response) => {
 
         const brand = await brandService.updateBrand(id, name, status);
 
-        res.status(200).json({
-            success: true,
-            message: "Brand updated successfully",
-            data: {
-                ...brand,
-                id: brand.id.toString()
-            }
-        });
+        return successResponse(res, "Brand updated successfully", serializeBigInt(brand))
     } catch (error: any) {
         if (error instanceof ZodError) {
             return res.status(400).json({
-                error: error.issues.map((e: any) => e.message)
+                status: false,
+                message: "Validation failed",
+                error: formatZodError(error)
             });
         }
-        res.status(400).json({
-            success: false,
-            message: error.message
-        });
+        return errorResponse(res, "Failed to update brand", error.message || "Failed to update brand", 400)
     }
 };
 
 export const deleteBrandhandler = async (req: Request, res: Response) => {
     try {
-        const id = req.params.id as string
-
+        const id = req.params.id
+        console.log("Deleting brand with id:", id);
         const result = await brandService.deleteBrand(id)
 
-        res.status(200).json({
-            success: true,
-            message: result.message
-        })
+        return successResponse(res, "Brand deleted successfully", serializeBigInt(result))
     } catch (error: any) {
-        res.status(400).json({
-            success: false,
-            message: error.message
-        })
+        return errorResponse(res, "Failed to delete brand", error.message || "Failed to delete brand", 400)
     }
 }

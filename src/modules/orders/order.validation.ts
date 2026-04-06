@@ -6,8 +6,8 @@ const orderItemSchema = z.object({
         message: "productId must be a valid number"
     }),
 
-    variantId: z.coerce.bigint({
-        message: "variantId must be a valid number"
+    productVariantId: z.coerce.bigint({
+        message: "productVariantId must be a valid number"
     }),
 
     quantity: z.coerce.number({
@@ -54,4 +54,10 @@ export const createOrderSchema = z.object({
 
     items: z.array(orderItemSchema)
         .min(1, "At least one item is required")
+
+    // ✅ Optional coupon code
+    , couponCode: z.string()
+        .max(50)
+        .transform(val => val.trim())
+        .optional()
 });

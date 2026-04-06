@@ -6,6 +6,8 @@ import { AuthRequest } from "../../middleware/auth.middleware.js";
 import { serializeBigInt } from "../../utils/serialize.js";
 import { createUserSchema } from "./user.validation.js";
 import { ZodError } from "zod";
+import { errorResponse, successResponse } from "../../utils/response.js";
+import { formatZodError } from "../../utils/zodError.js";
 
 export const createUserHandler = async (req: Request, res: Response) => {
     try {
@@ -19,22 +21,18 @@ export const createUserHandler = async (req: Request, res: Response) => {
 
         const result = { ...safeUser, id: user.id.toString() }
 
-        res.status(201).json({
-            message: "User created successfully",
-            data: result,
-        });
+        return successResponse(res, "User created successfully", result, null, 201)
     } catch (error: any) {
         console.error(error);
 
         if (error instanceof ZodError) {
             return res.status(400).json({
-                error: error.issues.map((e: any) => e.message)
+                status: false,
+                message: "Validation failed",
+                error: formatZodError(error)
             });
         }
-
-        res.status(500).json({
-            error: error.message || "Failed to create user",
-        });
+        return errorResponse(res, "Failed to create user", error.message || "Failed to create user", 500)
     }
 };
 
@@ -54,13 +52,9 @@ export const setPasswordHandler = async (req: Request, res: Response) => {
 
         await userService.setPassword(token, password);
 
-        res.json({
-            message: "Password set successfully",
-        });
+        return successResponse(res, "Password set successfully")
     } catch (error: any) {
-        res.status(400).json({
-            error: error.message || "Failed to set password",
-        });
+        return errorResponse(res, "Failed to set password", error.message || "Failed to set password", 400)
     }
 };
 
@@ -79,13 +73,9 @@ export const changePasswordHandler = async (req: AuthRequest, res: Response) => 
 
         await userService.changePassword(user?.userId, currentPassword, newPassword)
 
-        res.json({
-            message: "Password change successfully"
-        })
+        return successResponse(res, "Password changed successfully")
     } catch (error: any) {
-        res.status(400).json({
-            error: error.message || "Failed to change password"
-        })
+        return errorResponse(res, "Failed to change password", error.message || "Failed to change password", 400)
     }
 }
 
@@ -100,12 +90,9 @@ export const getUserHandler = async (req: Request, res: Response) => {
             return safeUser;
         });
 
-        res.json({
-            data: serializeBigInt(result),
-            meta: users.meta
-        });
-    } catch (error) {
-        res.status(500).json({ error: "Failed to fetch users" });
+        return successResponse(res, "Users fetched successfully", serializeBigInt(result), users.meta)
+    } catch (error: any) {
+        return errorResponse(res, "Failed to fetch users", error.message || "Failed to fetch users", 500)
     }
 };
 
@@ -123,19 +110,14 @@ export const loginHandler = async (req: Request, res: Response) => {
         const { user, token } = await userService.loginUser(email, password)
 
         const { password: pwd, resetToken, resetTokenExpiry, ...safeUser } = user
-        res.json({
-            message: "Login Successful",
-            data: {
-                user: {
-                    ...safeUser,
-                    id: user.id.toString()
-                },
-                token
-            }
-        })
+
+        const result = {
+            user: safeUser,
+            token
+        }
+
+        return successResponse(res, "Login successful", serializeBigInt(result))
     } catch (error: any) {
-        res.status(401).json({
-            error: error.message || "Login failed"
-        })
+        return errorResponse(res, "Failed to login", error.message || "Failed to login", 400)
     }
 }

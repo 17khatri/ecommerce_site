@@ -11,7 +11,8 @@ export const createOrderService = async (data: any) => {
         state,
         address,
         paymentMethod,
-        items
+        items,
+        couponCode
     } = data;
 
     if (!items || items.length === 0) {
@@ -78,6 +79,57 @@ export const createOrderService = async (data: any) => {
             });
         }
 
+        let discountAmount = 0;
+        let appliedCouponId: bigint | null = null;
+
+        if (couponCode) {
+            const normalizedCode = couponCode.trim().toUpperCase();
+
+            const coupon = await tx.coupon.findFirst({
+                where: {
+                    code: normalizedCode,
+                    deletedAt: null,
+                    status: true
+                }
+            });
+            if (!coupon) {
+                throw new Error("Invalid coupon code");
+            }
+
+            const now = new Date();
+
+            // ✅ Check validity dates
+            if (now < coupon.startDate || now > coupon.endDate) {
+                throw new Error("Coupon expired or not active");
+            }
+
+            // ✅ Check usage limit
+            if (coupon.usedCount >= coupon.maxUsage) {
+                throw new Error("Coupon usage limit reached");
+            }
+
+            // ✅ Check minimum order amount
+            if (totalAmount < coupon.minOrderAmount) {
+                throw new Error(`Minimum order amount should be ${coupon.minOrderAmount}`);
+            }
+
+            // ✅ Calculate discount
+            if (coupon.couponType === "PERCENTAGE") {
+                discountAmount = (totalAmount * (coupon.discountPercentage || 0)) / 100;
+
+                // Apply max discount cap
+                if (coupon.maxDiscountPrice) {
+                    discountAmount = Math.min(discountAmount, coupon.maxDiscountPrice);
+                }
+            } else if (coupon.couponType === "FIXED") {
+                discountAmount = coupon.fixedAmount || 0;
+            }
+
+            appliedCouponId = coupon.id;
+        }
+
+        const finalAmount = totalAmount - discountAmount;
+
         // ✅ Step 2: Create Order
         const order = await tx.order.create({
             data: {
@@ -90,9 +142,30 @@ export const createOrderService = async (data: any) => {
                 zipCode,
                 state,
                 address,
-                paymentMethod
+                paymentMethod,
+                couponId: appliedCouponId,
+                discountAmount,
+                finalAmount
             }
         });
+
+        if (appliedCouponId) {
+            const updatedCoupon = await tx.coupon.update({
+                where: { id: appliedCouponId },
+                data: {
+                    usedCount: {
+                        increment: 1
+                    }
+                }
+            });
+
+            if (updatedCoupon.usedCount >= updatedCoupon.maxUsage) {
+                await tx.coupon.update({
+                    where: { id: appliedCouponId },
+                    data: { status: false }
+                });
+            }
+        }
 
         // ✅ Step 3: Create OrderItems
         const orderItems = [];
@@ -119,6 +192,31 @@ export const createOrderService = async (data: any) => {
             });
 
             orderItems.push(orderItem);
+        }
+
+        // ✅ Step 4: Update Cart (IMPORTANT FIX)
+        for (const item of createdItems) {
+            const cartItem = cartMap.get(item.productVariantId.toString());
+
+            if (!cartItem) continue;
+
+            const remainingQty = cartItem.quantity - item.quantity;
+
+            if (remainingQty > 0) {
+                await tx.cartItem.update({
+                    where: { id: cartItem.id },
+                    data: {
+                        quantity: remainingQty
+                    }
+                });
+            } else {
+                await tx.cartItem.update({
+                    where: { id: cartItem.id },
+                    data: {
+                        deletedAt: new Date()
+                    }
+                });
+            }
         }
 
         return {

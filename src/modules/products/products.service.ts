@@ -20,6 +20,17 @@ export const createProduct = async (categoryId: bigint, brandId: bigint, name: s
 
     return prisma.$transaction(async (tx) => {
 
+        const existing = await tx.product.findFirst({
+            where: {
+                name: name.trim(),
+                deletedAt: null
+            }
+        })
+
+        if (existing) {
+            throw new Error("Product with the same name already exists")
+        }
+
         const product = await tx.product.create({
             data: {
                 categoryId,

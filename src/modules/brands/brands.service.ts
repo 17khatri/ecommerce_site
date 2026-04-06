@@ -90,12 +90,12 @@ export const getBrands = async (query: any) => {
 };
 
 export const deleteBrand = async (id: string) => {
-    const brandId = BigInt(id);
+    const brandId = Number(id);
     const now = new Date()
+    console.log("Attempting to delete brand with id:", brandId);
     const brand = await prisma.brand.findFirst({
         where: {
             id: brandId,
-            deletedAt: null
         }
     })
 

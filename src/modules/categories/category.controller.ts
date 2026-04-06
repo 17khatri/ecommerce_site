@@ -3,6 +3,8 @@ import * as categoryService from "./category.service.js";
 import { serializeBigInt } from "../../utils/serialize.js";
 import { categoryIdSchema, createCategorySchema, updateCategorySchema } from "./category.validation.js";
 import { ZodError } from "zod";
+import { errorResponse, successResponse } from "../../utils/response.js";
+import { formatZodError } from "../../utils/zodError.js";
 
 export const createCategoryHandler = async (req: Request, res: Response) => {
     try {
@@ -10,25 +12,18 @@ export const createCategoryHandler = async (req: Request, res: Response) => {
 
         const category = await categoryService.createCategory(validateData.name, validateData.parentId);
 
-        res.status(201).json({
-            message: "Category created",
-            data: {
-                ...category,
-                id: category.id.toString(),
-                parentId: category.parentId?.toString(),
-            },
-        });
+        return successResponse(res, "Category created", serializeBigInt(category), null, 201)
     } catch (error: any) {
 
         if (error instanceof ZodError) {
             return res.status(400).json({
-                error: error.issues.map((e: any) => e.message)
+                status: false,
+                message: "Validation failed",
+                error: formatZodError(error)
             });
         }
 
-        res.status(500).json({
-            error: error.message,
-        });
+        return errorResponse(res, "Failed to create category", error.message || "Failed to create category", 400)
     }
 };
 
@@ -37,13 +32,10 @@ export const getCategoryHandler = async (req: Request, res: Response) => {
         const result = await categoryService.getCategories(req.query);
         const safeData = serializeBigInt(result.data);
 
-        res.json({
-            data: safeData,
-            meta: result.meta,
-        });
+        return successResponse(res, "Categories fetched successfully", safeData, result.meta)
     } catch (error: any) {
         console.error(error);
-        res.status(500).json({ error: "Failed to fetch categories" });
+        return errorResponse(res, "Failed to fetch categories", error.message || "Failed to fetch categories", 500)
     }
 };
 
@@ -53,15 +45,9 @@ export const deleteCategoryHandler = async (req: Request, res: Response) => {
 
         const result = await categoryService.deleteCategory(id);
 
-        res.status(200).json({
-            success: true,
-            message: result.message
-        });
+        return successResponse(res, "Category deleted successfully", serializeBigInt(result))
     } catch (error: any) {
-        res.status(400).json({
-            success: false,
-            message: error.message
-        });
+        return errorResponse(res, "Failed to delete category", error.message || "Failed to delete category", 400)
     }
 };
 
@@ -77,24 +63,15 @@ export const updateCategoryHandler = async (req: Request, res: Response) => {
             validatedData.parentId
         );
 
-        res.status(200).json({
-            success: true,
-            message: "Category updated successfully",
-            data: {
-                ...category,
-                id: category.id.toString(),
-                parentId: category.parentId?.toString() || null
-            }
-        });
+        return successResponse(res, "Category updated successfully", serializeBigInt(category))
     } catch (error: any) {
         if (error instanceof ZodError) {
             return res.status(400).json({
-                error: error.issues.map((e: any) => e.message)
+                status: false,
+                message: "Validation failed",
+                error: formatZodError(error)
             });
         }
-        res.status(400).json({
-            success: false,
-            message: error.message
-        });
+        return errorResponse(res, "Failed to update category", error.message || "Failed to update category", 400)
     }
 };
