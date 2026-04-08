@@ -3,6 +3,7 @@ import * as couponService from "./coupon.service.js";
 import { Request, Response } from "express";
 import { ZodError } from "zod";
 import { serializeBigInt } from "../../utils/serialize.js";
+import { errorResponse, successResponse } from "../../utils/response.js";
 
 export const createCouponHandler = async (req: Request, res: Response) => {
     try {
@@ -10,21 +11,14 @@ export const createCouponHandler = async (req: Request, res: Response) => {
 
         const coupon = await couponService.createCoupon(data);
 
-        res.status(201).json({
-            success: true,
-            message: "Coupon created successfully",
-            data: serializeBigInt(coupon)
-        });
+        return successResponse(res, "Coupon created successfully", serializeBigInt(coupon), null, 201)
     } catch (error: any) {
         if (error instanceof ZodError) {
             return res.status(400).json({
                 error: error.issues.map((e: any) => e.message)
             });
         }
-        res.status(400).json({
-            success: false,
-            message: error.message
-        });
+        return errorResponse(res, "Failed to create coupon", error.message || "Failed to create coupon", 500)
     }
 };
 
@@ -32,15 +26,9 @@ export const getCouponsHandler = async (req: Request, res: Response) => {
     try {
         const coupons = await couponService.getCoupons();
 
-        res.json({
-            success: true,
-            data: serializeBigInt(coupons)
-        });
+        return successResponse(res, "Coupons retrieved successfully", serializeBigInt(coupons))
     } catch (error: any) {
-        res.status(400).json({
-            success: false,
-            message: error.message
-        });
+        return errorResponse(res, "Failed to retrieve coupons", error.message || "Something went wrong", 500);
     }
 }
 
@@ -56,11 +44,7 @@ export const updateCouponHandler = async (req: Request, res: Response) => {
 
         const coupon = await couponService.updateCoupon(id, validatedData);
 
-        return res.json({
-            success: true,
-            message: "Coupon updated successfully",
-            data: serializeBigInt(coupon)
-        });
+        return successResponse(res, "Coupon updated successfully", serializeBigInt(coupon))
 
     } catch (error: any) {
 
@@ -70,8 +54,6 @@ export const updateCouponHandler = async (req: Request, res: Response) => {
             });
         }
 
-        return res.status(400).json({
-            error: error.message
-        });
+        return errorResponse(res, "Failed to update coupon", error.message || "Failed to update coupon", 500)
     }
 };

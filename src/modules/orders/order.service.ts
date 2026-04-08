@@ -47,7 +47,6 @@ export const createOrderService = async (data: any) => {
                 throw new Error("Invalid quantity");
             }
         }
-
         let totalAmount = 0;
         const createdItems = [];
 
@@ -58,6 +57,13 @@ export const createOrderService = async (data: any) => {
                     id: BigInt(item.productVariantId),
                     productId: BigInt(item.productId),
                     deletedAt: null
+                },
+                include: {
+                    product: {
+                        select: {
+                            brandId: true,
+                        }
+                    }
                 }
             });
 
@@ -74,14 +80,17 @@ export const createOrderService = async (data: any) => {
             createdItems.push({
                 productId: BigInt(item.productId),
                 productVariantId: BigInt(item.productVariantId),
-                productPrice: variant.price,
-                quantity: item.quantity
+                productPrice: variant.price.toNumber(),
+                quantity: item.quantity,
+                brandId: Number(variant.product.brandId) || null,
+                discountedPrice: 0,
+                isCouponApplied: false,
+                discountAmount: 0
             });
         }
 
         let discountAmount = 0;
         let appliedCouponId: bigint | null = null;
-
         if (couponCode) {
             const normalizedCode = couponCode.trim().toUpperCase();
 
@@ -92,11 +101,32 @@ export const createOrderService = async (data: any) => {
                     status: true
                 }
             });
+
             if (!coupon) {
                 throw new Error("Invalid coupon code");
             }
 
+            const couponBrandId = coupon.brandId ? Number(coupon.brandId) : null;
+
             const now = new Date();
+
+            let eligibleAmount = totalAmount;
+
+            if (couponBrandId) {
+                const eligibleItems = createdItems.filter(
+                    (item) => item.brandId === Number(coupon.brandId)
+                );
+
+                if (eligibleItems.length === 0) {
+                    throw new Error("Coupon not applicable for selected products");
+                }
+
+                eligibleAmount = eligibleItems.reduce(
+                    (sum, item) =>
+                        sum + Number(item.productPrice) * item.quantity,
+                    0
+                );
+            }
 
             // ✅ Check validity dates
             if (now < coupon.startDate || now > coupon.endDate) {
@@ -109,26 +139,76 @@ export const createOrderService = async (data: any) => {
             }
 
             // ✅ Check minimum order amount
-            if (totalAmount < coupon.minOrderAmount) {
+            if (eligibleAmount < coupon.minOrderAmount) {
                 throw new Error(`Minimum order amount should be ${coupon.minOrderAmount}`);
             }
 
             // ✅ Calculate discount
             if (coupon.couponType === "PERCENTAGE") {
-                discountAmount = (totalAmount * (coupon.discountPercentage || 0)) / 100;
+                discountAmount =
+                    (eligibleAmount * (coupon.discountPercentage || 0)) / 100;
 
-                // Apply max discount cap
                 if (coupon.maxDiscountPrice) {
-                    discountAmount = Math.min(discountAmount, coupon.maxDiscountPrice);
+                    discountAmount = Math.min(
+                        discountAmount,
+                        coupon.maxDiscountPrice
+                    );
                 }
             } else if (coupon.couponType === "FIXED") {
                 discountAmount = coupon.fixedAmount || 0;
+
+                // safety
+                discountAmount = Math.min(discountAmount, eligibleAmount);
             }
 
             appliedCouponId = coupon.id;
         }
 
         const finalAmount = totalAmount - discountAmount;
+
+        if (discountAmount > 0) {
+            let eligibleItems = createdItems;
+
+            // If coupon is brand-specific
+            if (appliedCouponId) {
+                const coupon = await tx.coupon.findUnique({
+                    where: { id: appliedCouponId }
+                });
+
+                if (coupon?.brandId) {
+                    eligibleItems = createdItems.filter(
+                        (item) => item.brandId === Number(coupon.brandId)
+                    );
+                }
+            }
+
+            const eligibleTotal = eligibleItems.reduce(
+                (sum, item) => sum + Number(item.productPrice) * item.quantity,
+                0
+            );
+
+            for (const item of createdItems) {
+                const itemTotal = Number(item.productPrice) * item.quantity;
+
+                if (!eligibleItems.includes(item)) {
+                    item.discountedPrice = item.productPrice;
+                    item.isCouponApplied = false;
+                    item.discountAmount = 0;
+                    continue;
+                }
+
+                const itemDiscount =
+                    (itemTotal / eligibleTotal) * discountAmount;
+
+                const perUnitDiscount = itemDiscount / item.quantity;
+
+                item.discountedPrice =
+                    Number(item.productPrice) - perUnitDiscount;
+
+                item.isCouponApplied = true;
+                item.discountAmount = perUnitDiscount;
+            }
+        }
 
         // ✅ Step 2: Create Order
         const order = await tx.order.create({
@@ -177,7 +257,9 @@ export const createOrderService = async (data: any) => {
                     productId: item.productId,
                     productVariantId: item.productVariantId,
                     productPrice: item.productPrice,
-                    quantity: item.quantity
+                    quantity: item.quantity,
+                    discountedPrice: item.discountedPrice,
+                    is_coupon_applied: item.isCouponApplied,
                 }
             });
 
@@ -225,3 +307,21 @@ export const createOrderService = async (data: any) => {
         };
     });
 };
+
+
+export const getUserOrdersService = async (userId: string) => {
+    const orders = await prisma.order.findMany({
+        where: { userId: BigInt(userId) },
+        orderBy: { createdAt: "desc" },
+        include: {
+            orderItems: {
+                include: {
+                    productVariant: true,
+                    product: true
+                }
+            },
+            coupon: true
+        }
+    })
+    return orders;
+}

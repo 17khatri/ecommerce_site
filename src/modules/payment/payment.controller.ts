@@ -6,7 +6,7 @@ import prisma from "../../prisma/client.js";
 
 export const createCheckoutSession = async (req: AuthRequest, res: Response) => {
     try {
-        const { items, fullName, city, state, zipCode, address } = req.body;
+        const { items, fullName, city, state, zipCode, address, couponCode } = req.body;
         const parsedZipCode = Number(zipCode);
         const userId = req.user?.userId;
 
@@ -16,9 +16,10 @@ export const createCheckoutSession = async (req: AuthRequest, res: Response) => 
 
         const formattedItems = items.map((item: any) => ({
             productId: item.productId,
-            productVariantId: item.variantId, // ✅ FIX
+            productVariantId: item.productVariantId, // ✅ FIX
             quantity: item.quantity
         }));
+
 
         const order = await orderService.createOrderService({
             userId,
@@ -29,23 +30,72 @@ export const createCheckoutSession = async (req: AuthRequest, res: Response) => 
             zipCode: parsedZipCode,
             state,
             address,
-            items: formattedItems
+            items: formattedItems,
+            couponCode
         });
 
+        // ✅ Step 1: Fetch variants from DB
+        const variants = await prisma.productVariant.findMany({
+            where: {
+                id: {
+                    in: items.map((i: any) => BigInt(i.productVariantId)),
+                },
+            },
+            include: {
+                product: true,
+            },
+        });
+
+        // ✅ Step 2: Build line items
+        const lineItems = items.map((item: any) => {
+            const variant = variants.find(
+                (v) => v.id.toString() === item.productVariantId.toString()
+            );
+
+            if (!variant) {
+                throw new Error("Invalid product variant");
+            }
+
+            return {
+                price_data: {
+                    currency: "inr",
+                    product_data: {
+                        name: variant.product.name, // ✅ from DB
+                    },
+                    unit_amount: Number(order.finalAmount) * 100, // ✅ in paise
+                },
+                quantity: item.quantity,
+            };
+        });
+
+        const productNames = items.map((item: any) => {
+            const variant = variants.find(
+                (v) => v.id.toString() === item.productVariantId.toString()
+            );
+
+            if (!variant) return "Unknown Item";
+
+            return `${variant.product.name} (${variant.color}${variant.size ? " - " + variant.size : ""}) x${item.quantity}`;
+        }).join(", ");
+
+
+        // ✅ Step 3: Create Stripe session
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             mode: "payment",
 
-            line_items: items.map((item: any) => ({
-                price_data: {
-                    currency: "inr",
-                    product_data: {
-                        name: item.product.name,
+            line_items: [
+                {
+                    price_data: {
+                        currency: "inr",
+                        product_data: {
+                            name: productNames
+                        },
+                        unit_amount: Number(order.finalAmount) * 100,
                     },
-                    unit_amount: item.price * 100,
+                    quantity: 1, // ✅ IMPORTANT
                 },
-                quantity: item.quantity,
-            })),
+            ],
 
             metadata: {
                 orderId: order.id.toString(),
@@ -55,9 +105,17 @@ export const createCheckoutSession = async (req: AuthRequest, res: Response) => 
             cancel_url: "http://localhost:3000/cancel",
         });
 
-        console.log("Stripe session created:", session);
+        await prisma.order.update({
+            where: { id: order.id },
+            data: {
+                sessionId: session.id,
+            },
+        })
+
 
         return res.json({
+            success: true,
+            message: "Checkout session created",
             url: session.url,
         });
 

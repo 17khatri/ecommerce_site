@@ -143,6 +143,8 @@ export const getProducts = async (query: any) => {
         ];
     }
 
+    const baseUrl = `${process.env.BASE_URL || "http://localhost:3000"}/`;
+
     const [products, total] = await Promise.all([
         prisma.product.findMany({
             where,
@@ -157,6 +159,12 @@ export const getProducts = async (query: any) => {
                 category: {
                     select: { name: true },
                 },
+                images: {
+                    select: {
+                        imagePath: true,
+                        isPrimary: true
+                    }
+                }
             },
 
             orderBy: {
@@ -166,8 +174,20 @@ export const getProducts = async (query: any) => {
         prisma.product.count({ where }),
     ]);
 
+    const transformedProducts = products.map((product) => ({
+        ...product,
+        id: product.id.toString(),
+        status: product.status ? "active" : "inactive",
+
+        images: product.images.map(img => ({
+            imagePath: img.imagePath,
+            imageUrl: baseUrl + img.imagePath,
+            isPrimary: img.isPrimary
+        }))
+    }))
+
     return {
-        data: products,
+        data: transformedProducts,
         meta: {
             total,
             page: pageNumber,

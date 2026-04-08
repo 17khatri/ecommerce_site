@@ -3,6 +3,7 @@ import * as cartService from "./carts.service.js";
 import { AuthRequest } from "../../middleware/auth.middleware.js";
 import { serializeBigInt } from "../../utils/serialize.js";
 import { addToCartSchema } from "./cart.validation.js";
+import { errorResponse, successResponse } from "../../utils/response.js";
 
 export const craeteCartHandler = async (req: AuthRequest, res: Response) => {
     try {
@@ -16,19 +17,11 @@ export const craeteCartHandler = async (req: AuthRequest, res: Response) => {
 
         const cart = await cartService.addToCart(userId, validatedData.productId, validatedData.variantId, validatedData.quantity);
 
-        res.status(200).json({
-            data: {
-                ...cart,
-                id: cart.id.toString(),
-                cartId: cart.cartId.toString(),
-                productId: cart.productId.toString(),
-                variantId: cart.variantId.toString()
-            }
-        });
+        return successResponse(res, "Item added to cart successfully", serializeBigInt(cart), null, 201);
 
     } catch (error: any) {
         console.error(error);
-        res.status(500).json({ error: error.message || "Something went wrong" });
+        return errorResponse(res, "Failed to add item to cart", error.message || "Something went wrong", 500);
     }
 };
 
@@ -42,15 +35,10 @@ export const getCartHandler = async (req: AuthRequest, res: Response) => {
 
         const cart = await cartService.getCart(userId);
 
-        res.status(200).json({
-            success: true,
-            data: serializeBigInt(cart)
-        });
+        return successResponse(res, "Cart retrieved successfully", serializeBigInt(cart));
 
     } catch (error: any) {
-        res.status(500).json({
-            error: error.message || "Something went wrong"
-        });
+        return errorResponse(res, "Failed to retrieve cart", error.message || "Something went wrong", 500);
     }
 };
 
@@ -84,22 +72,12 @@ export const updateCartItemHandler = async (req: AuthRequest, res: Response) => 
             quantity
         );
 
-        const safeData = serializeBigInt(result)
-
-        res.status(200).json({
-            success: true,
-            message: "Cart updated successfully",
-            data: safeData
-        });
+        return successResponse(res, "Cart item updated successfully", serializeBigInt(result));
 
     } catch (error: any) {
-        res.status(400).json({
-            success: false,
-            message: error.message
-        });
+        return errorResponse(res, "Failed to update cart item", error.message || "Something went wrong", 500);
     }
 };
-
 
 export const deleteCartHandler = async (req: AuthRequest, res: Response) => {
     try {
@@ -112,14 +90,8 @@ export const deleteCartHandler = async (req: AuthRequest, res: Response) => {
         }
 
         const deletedCartItem = await cartService.deleteCartItem(userId, productId, variantId)
-        const safeData = serializeBigInt(deletedCartItem)
-        res.status(200).json({
-            message: "Item is removed from cart",
-            data: safeData
-        })
+        return successResponse(res, "Cart item removed successfully", serializeBigInt(deletedCartItem))
     } catch (error: any) {
-        res.status(400).json({
-            message: error.message
-        });
+        return errorResponse(res, "Failed to remove cart item", error.message || "Something went wrong", 500);
     }
 }

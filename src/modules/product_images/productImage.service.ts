@@ -103,6 +103,29 @@ export const uploadProductImagesService = async (req: any) => {
     return response;
 };
 
+export const getProductImagesSerice = async (productId: string) => {
+    if (!productId) {
+        throw new Error("productId is required");
+    }
+
+    const productIdBigInt = BigInt(productId);
+
+    const images = await prisma.productImage.findMany({
+        where: { productId: productIdBigInt },
+        orderBy: { id: "asc" },
+    });
+
+    const baseUrl = `${process.env.BASE_URL || "http://localhost:3000"}/`;
+
+    return images.map((img) => ({
+        id: img.id.toString(),
+        productId: img.productId.toString(),
+        imagePath: img.imagePath,
+        imageUrl: baseUrl + img.imagePath,
+        isPrimary: img.isPrimary,
+    }));
+}
+
 export const deleteProductImageService = async (imageId: string) => {
     if (!imageId) {
         throw new Error("imageId is required");

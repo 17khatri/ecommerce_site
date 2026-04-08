@@ -57,11 +57,20 @@ export const createCoupon = async (data: any) => {
 }
 
 export const getCoupons = async () => {
-    return prisma.coupon.findMany({
+    const coupons = await prisma.coupon.findMany({
         where: {
             deletedAt: null
         }
     })
+
+    const transformedCoupons = coupons.map(coupon => ({
+        ...coupon,
+        id: coupon.id.toString(),
+        status: coupon.status ? "active" : "inactive"
+    }))
+    return {
+        data: transformedCoupons
+    };
 }
 
 export const updateCoupon = async (id: string, data: any) => {

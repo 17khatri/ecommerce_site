@@ -45,22 +45,67 @@ export const getCategories = async (query: any) => {
         where.status = status === "true" || status === true;
     }
 
+    let categories;
+
     if (search) {
-        where.name = {
-            contains: search,
-        };
+        const matchedCategories = await prisma.category.findMany({
+            where: {
+                name: {
+                    contains: search,
+                },
+                deletedAt: null,
+            },
+            select: { id: true, parentId: true },
+        });
+
+        const ids = new Set<string>();
+
+        matchedCategories.forEach(cat => {
+            ids.add(cat.id.toString());
+            if (cat.parentId) {
+                ids.add(cat.parentId.toString());
+            }
+        });
+
+        // ✅ Include children
+        const childCategories = await prisma.category.findMany({
+            where: {
+                deletedAt: null,
+                parentId: {
+                    in: Array.from(ids).map(id => BigInt(id)),
+                },
+            },
+            select: { id: true },
+        });
+
+        childCategories.forEach(child => {
+            ids.add(child.id.toString());
+        });
+
+        categories = await prisma.category.findMany({
+            where: {
+                deletedAt: null,
+                id: {
+                    in: Array.from(ids).map(id => BigInt(id)),
+                },
+            },
+            orderBy: {
+                [sortBy]: order === "asc" ? "asc" : "desc",
+            },
+        });
+
+    } else {
+        categories = await prisma.category.findMany({
+            where,
+            skip,
+            take: limitNumber,
+            orderBy: {
+                [sortBy]: order === "asc" ? "asc" : "desc",
+            },
+        });
     }
 
     const total = await prisma.category.count({ where });
-
-    const categories = await prisma.category.findMany({
-        where,
-        skip,
-        take: limitNumber,
-        orderBy: {
-            [sortBy]: order === "asc" ? "asc" : "desc",
-        },
-    });
 
     const map = new Map<string, any>();
 
@@ -69,6 +114,7 @@ export const getCategories = async (query: any) => {
             ...cat,
             id: cat.id.toString(),
             parentId: cat.parentId?.toString() || null,
+            status: cat.status ? "active" : "inactive",
             children: [],
         });
     });

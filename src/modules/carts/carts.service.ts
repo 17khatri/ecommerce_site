@@ -86,6 +86,7 @@ export const getCart = async (userId: string) => {
                             name: true,
                             status: true,
                             deletedAt: true,
+                            brandId: true,
                             images: {
                                 where: { isPrimary: true },
                                 select: { imagePath: true }
@@ -134,6 +135,7 @@ export const getCart = async (userId: string) => {
             quantity: qty,
             price,
             total: itemTotal,
+            brandId: Number(item.product.brandId) || null,
             product: {
                 name: item.product.name,
                 image: item.product.images[0]?.imagePath || null
@@ -198,8 +200,12 @@ export const updateCartItem = async (
         });
     }
 
+    const newQuantity = existingItem && !existingItem.deletedAt
+        ? existingItem.quantity + quantity
+        : quantity;
+
     // ✅ Validate stock
-    if (variant.quantity < quantity) {
+    if (variant.quantity < newQuantity) {
         throw new Error("Not enough stock");
     }
 

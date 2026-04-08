@@ -78,8 +78,15 @@ export const getBrands = async (query: any) => {
         prisma.brand.count({ where }),
     ]);
 
+    const transformedBrands = brands.map((brand) => ({
+        ...brand,
+        id: brand.id.toString(),
+
+        status: brand.status ? "active" : "inactive",
+    }));
+
     return {
-        data: brands,
+        data: transformedBrands,
         meta: {
             total,
             page: pageNumber,

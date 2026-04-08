@@ -6,6 +6,6 @@ const router = Router()
 
 router.post("/", authUser, craeteCartHandler)
 router.get("/", authUser, getCartHandler)
-router.put("/update", authUser, updateCartItemHandler)
+router.patch("/updateQuantity", authUser, updateCartItemHandler)
 router.delete("/remove", authUser, deleteCartHandler)
 export default router

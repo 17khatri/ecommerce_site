@@ -158,8 +158,15 @@ export const getUsers = async (query: any) => {
         prisma.user.count({ where }),
     ]);
 
+    const transformedUsers = users.map((u) => ({
+        ...u,
+        id: u.id.toString(),
+
+        status: u.status ? "active" : "inactive"
+    }))
+
     return {
-        data: users,
+        data: transformedUsers,
         meta: {
             total,
             page: pageNumber,

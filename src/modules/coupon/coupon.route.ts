@@ -5,7 +5,7 @@ import { createCouponHandler, getCouponsHandler, updateCouponHandler } from "./c
 
 const route = Router();
 
-route.get("/", authUser, getCouponsHandler)
+route.get("/", getCouponsHandler)
 route.post("/", authUser, isAdmin, createCouponHandler)
 route.put("/:id", authUser, isAdmin, updateCouponHandler)
 
