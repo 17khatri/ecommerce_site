@@ -175,6 +175,7 @@ model Order {
   id             BigInt        @id @default(autoincrement())
   userId         BigInt        @map("user_id")
   sessionId      String?       @map("session_id")
+  transictionId  String?       @map("transiction_id")
   totalAmount    Decimal       @db.Decimal(10, 2) @map("total_amount")
   paymentStatus  PaymentStatus @map("payment_status")
 

@@ -135,6 +135,8 @@ export const getSessionDetails = async (req: Request, res: Response) => {
 
         const session = await stripe.checkout.sessions.retrieve(sessionId);
 
+        console.log("Stripe Session:", session);
+
         const orderId = session.metadata?.orderId;
 
         if (!orderId) {
@@ -148,6 +150,7 @@ export const getSessionDetails = async (req: Request, res: Response) => {
                 where: { id: BigInt(orderId) },
                 data: {
                     paymentStatus: "SUCCESS",
+                    transictionId: session.payment_intent as string,
                 },
             });
 
@@ -167,6 +170,7 @@ export const getSessionDetails = async (req: Request, res: Response) => {
 
         return res.json({
             sessionId: session.id,
+            paymentIntent: session.payment_intent,
             paymentStatus: session.payment_status,
             orderId
         });
